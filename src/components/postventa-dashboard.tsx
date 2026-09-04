@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle, BarChart3, Bell, CalendarDays, Check, ChevronDown, ChevronRight,
   CarFront, Download, FileSpreadsheet, Gauge, Headphones, LayoutDashboard, Menu,
-  MoreHorizontal, Phone, Plus, Search, Settings2, ShieldCheck, SlidersHorizontal, Sparkles, Upload,
+  MoreHorizontal, Pencil, Phone, Plus, Search, Settings2, ShieldCheck, SlidersHorizontal, Sparkles, Upload,
   UserRound, Users, X,
 } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -28,6 +28,8 @@ type NewCustomerPayload = {
   customer: string; phone: string; email?: string; agency: string; advisor: string; bdcAgent: string;
   source: "entrega" | "servicio"; referenceDate: string; vehicles: Array<{ vin: string; model: string }>;
 };
+type CustomerGroup = { key: string; name: string; phone: string; email?: string; cases: FollowUpCase[] };
+type EditCustomerPayload = { customer: string; phone: string; email?: string; vehicles: Array<{ caseId: string; vin: string; model: string }> };
 
 const stageLabel = (stage: Stage) => stage === "nps" ? "NPS" : `Día ${stage}`;
 const prettyDate = (date: string) => new Intl.DateTimeFormat("es-MX", { day: "2-digit", month: "short" }).format(new Date(`${date}T12:00:00`)).replace(".", "");
@@ -93,6 +95,7 @@ export function PostventaDashboard() {
   const [recording, setRecording] = useState<FollowUpCase | null>(null);
   const [addingCustomer, setAddingCustomer] = useState(false);
   const [addingIncident, setAddingIncident] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<CustomerGroup | null>(null);
   const [mobileNav, setMobileNav] = useState(false);
   const [query, setQuery] = useState("");
   const [agency, setAgency] = useState("Todas las agencias");
@@ -124,7 +127,7 @@ export function PostventaDashboard() {
   const agencies = useMemo(() => ["Todas las agencias", ...Array.from(new Set(cases.map((item) => item.agency))).sort()], [cases]);
   const indexedVehicles = useMemo(() => indexCasesByCustomerVin(cases), [cases]);
   const customers = useMemo(() => {
-    const groups = new Map<string, { key: string; name: string; phone: string; email?: string; cases: FollowUpCase[] }>();
+    const groups = new Map<string, CustomerGroup>();
     indexedVehicles.forEach((item) => {
       const customerKey = customerNameKey(item.customer);
       const current = groups.get(customerKey);
@@ -180,6 +183,13 @@ export function PostventaDashboard() {
       await postJson("/api/incidents", { caseId, description, owner, dueDate, priority });
       await refreshCases(); setAddingIncident(false); setView("incidencias"); announce("Incidencia creada y asignada");
     } catch { announce("No fue posible crear la incidencia en la base de datos"); }
+  };
+
+  const editCustomer = async (payload: EditCustomerPayload) => {
+    try {
+      await postJson("/api/customers", { ...payload, action: "update" });
+      await refreshCases(); setEditingCustomer(null); announce("Cliente y vehículos actualizados");
+    } catch (error) { announce(error instanceof Error ? error.message : "No fue posible actualizar el cliente"); }
   };
 
   const exportCsv = () => {
@@ -272,7 +282,7 @@ export function PostventaDashboard() {
             </div>
             <div className="table-scroll">
               {view === "clientes" ? <table className="customers-table"><thead><tr><th>Cliente</th><th>Contacto</th><th>Agencias</th><th>Vehículos registrados</th><th>VIN / modelo</th><th /></tr></thead><tbody>
-                {customers.map((customer) => <tr key={customer.key} onClick={() => setSelected(customer.cases[0])}><td><div className="table-person"><strong>{customer.name}</strong><span>{customer.cases.length} {customer.cases.length === 1 ? "vehículo" : "vehículos"}</span></div></td><td><strong className="cell-strong">{customer.phone || "Sin teléfono"}</strong><span className="cell-sub">{customer.email || "Sin correo"}</span></td><td><div className="agency-stack">{Array.from(new Set(customer.cases.map((item) => item.agency))).map((name) => <span key={name}>{name}</span>)}</div></td><td><div className="vehicle-count"><CarFront size={16} /><strong>{customer.cases.length}</strong></div></td><td><div className="vin-stack">{customer.cases.slice(0, 3).map((item) => <span key={item.id}><strong>{item.vehicle || "Modelo sin registrar"}</strong><small>{item.vin}</small></span>)}{customer.cases.length > 3 && <em>+{customer.cases.length - 3} más</em>}</div></td><td><ChevronRight size={16} className="row-chevron" /></td></tr>)}
+                {customers.map((customer) => <tr key={customer.key} onClick={() => setEditingCustomer(customer)}><td><div className="table-person"><strong>{customer.name}</strong><span>{customer.cases.length} {customer.cases.length === 1 ? "vehículo" : "vehículos"}</span></div></td><td><strong className="cell-strong">{customer.phone || "Sin teléfono"}</strong><span className="cell-sub">{customer.email || "Sin correo"}</span></td><td><div className="agency-stack">{Array.from(new Set(customer.cases.map((item) => item.agency))).map((name) => <span key={name}>{name}</span>)}</div></td><td><div className="vehicle-count"><CarFront size={16} /><strong>{customer.cases.length}</strong></div></td><td><div className="vin-stack">{customer.cases.slice(0, 3).map((item) => <span key={item.id}><strong>{item.vehicle || "Modelo sin registrar"}</strong><small>{item.vin}</small></span>)}{customer.cases.length > 3 && <em>+{customer.cases.length - 3} más</em>}</div></td><td><button className="edit-customer-button" onClick={(event) => { event.stopPropagation(); setEditingCustomer(customer); }} title="Editar cliente"><Pencil size={14} /></button></td></tr>)}
                 {customers.length === 0 && <tr><td colSpan={6}><div className="empty"><Search size={22} /><strong>Sin clientes</strong><span>Cambia la búsqueda o registra un cliente nuevo.</span></div></td></tr>}
               </tbody></table> : <table><thead><tr><th>Cliente</th><th>Agencia</th><th>Modelo del vehículo</th><th>VIN</th><th>Ruta de seguimiento</th><th>Próximo contacto</th><th>Estado</th><th>Agente</th><th /></tr></thead><tbody>
                 {filtered.slice(0, view === "dashboard" ? 5 : 100).map((item) => { const next = getNext(item); return <tr key={item.id} onClick={() => setSelected(item)}><td><div className="table-person"><strong>{item.customer}</strong><span>{item.phone || "Sin teléfono"} · {item.id}</span></div></td><td><strong className="cell-strong">{item.agency}</strong></td><td><strong className="vehicle-model">{item.vehicle || "Modelo sin registrar"}</strong></td><td><span className="vin-code">{item.vin}</span></td><td><RouteRail item={item} compact /></td><td><strong className={next && !next.completedAt && next.dueDate < today ? "date-late" : "cell-strong"}>{next ? prettyDate(next.dueDate) : "—"}</strong><span className="cell-sub">{next ? stageLabel(next.stage) : "Ciclo completo"}</span></td><td><Badge status={item.status} /></td><td><div className="agent-chip">{item.bdcAgent ? item.bdcAgent[0] : "—"}</div><span className="agent-name">{item.bdcAgent || "Sin asignar"}</span></td><td><ChevronRight size={16} className="row-chevron" /></td></tr>; })}
@@ -287,6 +297,7 @@ export function PostventaDashboard() {
       {recording && <RecordModal item={recording} onClose={() => setRecording(null)} onSave={completeTouch} />}
       {addingCustomer && <CustomerModal onClose={() => setAddingCustomer(false)} onSave={addCustomer} />}
       {addingIncident && <IncidentModal cases={indexedVehicles} onClose={() => setAddingIncident(false)} onSave={addIncident} />}
+      {editingCustomer && <CustomerEditModal customer={editingCustomer} onClose={() => setEditingCustomer(null)} onSave={editCustomer} />}
       {notice && <div className="toast"><Check size={16} /><span>{notice}</span></div>}
     </div>
   );
@@ -337,6 +348,25 @@ function CustomerModal({ onClose, onSave }: { onClose: () => void; onSave: (payl
       {vehicles.map((vehicle, index) => <div className="vehicle-row" key={index}><span className="vehicle-index">{index + 1}</span><label className="field"><span>VIN *</span><input required value={vehicle.vin} onChange={(event) => updateVehicle(index, "vin", event.target.value.toUpperCase())} placeholder="VIN de 17 caracteres" maxLength={24} /></label><label className="field"><span>Modelo del vehículo *</span><input required value={vehicle.model} onChange={(event) => updateVehicle(index, "model", event.target.value)} placeholder="Ej. Song Plus DM-i" /></label>{vehicles.length > 1 && <button type="button" className="remove-vehicle" onClick={() => setVehicles(vehicles.filter((_, position) => position !== index))} aria-label="Quitar vehículo"><X size={16} /></button>}</div>)}
     </section>
     <div className="modal-actions"><button type="button" className="button secondary" onClick={onClose}>Cancelar</button><button className="button primary"><Check size={16} />Guardar cliente</button></div>
+  </form></div>;
+}
+
+function CustomerEditModal({ customer, onClose, onSave }: { customer: CustomerGroup; onClose: () => void; onSave: (payload: EditCustomerPayload) => void }) {
+  const [form, setForm] = useState({ customer: customer.name, phone: customer.phone, email: customer.email || "" });
+  const [vehicles, setVehicles] = useState(customer.cases.map((item) => ({ caseId: item.id, vin: item.vin, model: item.vehicle })));
+  const updateVehicle = (index: number, field: "vin" | "model", value: string) => setVehicles((current) => current.map((vehicle, position) => position === index ? { ...vehicle, [field]: value } : vehicle));
+  return <div className="overlay modal-layer" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><form className="modal wide-modal" onSubmit={(event) => { event.preventDefault(); onSave({ ...form, vehicles }); }}>
+    <div className="modal-head"><div><span className="panel-kicker">DIRECTORIO MAESTRO</span><h2>Editar cliente</h2><p>Actualiza sus datos y los vehículos vinculados sin alterar los seguimientos históricos.</p></div><button type="button" className="icon-button bordered" onClick={onClose}><X size={18} /></button></div>
+    <div className="form-grid">
+      <label className="field"><span>Nombre completo *</span><input required value={form.customer} onChange={(event) => setForm({ ...form, customer: event.target.value })} /></label>
+      <label className="field"><span>Teléfono</span><input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></label>
+      <label className="field field-full"><span>Correo</span><input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></label>
+    </div>
+    <section className="vehicles-editor edit-vehicles"><div className="vehicles-title"><div><CarFront size={17} /><span><strong>Vehículos registrados</strong><small>El VIN y el modelo se actualizan en todos sus expedientes asociados.</small></span></div><span className="vehicle-total">{vehicles.length}</span></div>
+      {vehicles.map((vehicle, index) => <div className="vehicle-row edit-vehicle-row" key={vehicle.caseId}><span className="vehicle-index">{index + 1}</span><label className="field"><span>VIN *</span><input required value={vehicle.vin} onChange={(event) => updateVehicle(index, "vin", event.target.value.toUpperCase())} /></label><label className="field"><span>Modelo del vehículo *</span><input required value={vehicle.model} onChange={(event) => updateVehicle(index, "model", event.target.value)} placeholder="Ej. Song Plus DM-i" /></label></div>)}
+    </section>
+    <div className="edit-note"><ShieldCheck size={15} /><span>Los contactos e incidencias anteriores permanecerán vinculados al vehículo.</span></div>
+    <div className="modal-actions"><button type="button" className="button secondary" onClick={onClose}>Cancelar</button><button className="button primary"><Check size={16} />Guardar cambios</button></div>
   </form></div>;
 }
 

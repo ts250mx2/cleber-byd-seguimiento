@@ -119,6 +119,8 @@ table { width: 100%; border-collapse: collapse; min-width: 920px; }th { padding:
 .agency-stack span { padding: 4px 6px; border-radius: 4px; background: #f0f2f3; color: #5c6469; font-size: 8px; }
 .vehicle-count { display: flex; align-items: center; gap: 7px; }
 .vehicle-count svg { color: var(--red); }
+.edit-customer-button { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 6px; background: white; color: #6f777d; }
+.edit-customer-button:hover { color: var(--red); border-color: #efced1; background: #fffafa; }
 .vin-stack { display: flex; flex-direction: column; gap: 7px; min-width: 210px; }
 .vin-stack > span { display: grid; grid-template-columns: minmax(110px, 1fr) 1fr; align-items: center; gap: 8px; }
 .vin-stack strong { font-size: 8.5px; }
@@ -131,6 +133,7 @@ table { width: 100%; border-collapse: collapse; min-width: 920px; }th { padding:
 .wide-modal { width: min(760px, 100%); }
 .field input { width: 100%; border: 1px solid var(--line); border-radius: 7px; background: #fbfbfc; color: var(--ink); padding: 10px 11px; font-size: 10px; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+.field-full { grid-column: 1 / -1; }
 .vehicles-editor { border: 1px solid var(--line); background: #f7f8f8; border-radius: 8px; padding: 13px; }
 .vehicles-title, .vehicles-title > div { display: flex; align-items: center; justify-content: space-between; gap: 9px; }
 .vehicles-title svg { color: var(--red); }
@@ -139,6 +142,10 @@ table { width: 100%; border-collapse: collapse; min-width: 920px; }th { padding:
 .vehicles-title small { color: #92989d; font-size: 7.5px; margin-top: 2px; }
 .add-vehicle { color: var(--red); }
 .vehicle-row { display: grid; grid-template-columns: 25px 1fr 1fr 28px; gap: 9px; align-items: center; padding-top: 12px; margin-top: 12px; border-top: 1px solid #e1e4e6; }
+.edit-vehicle-row { grid-template-columns: 25px 1fr 1fr; }
+.edit-vehicles { max-height: 350px; overflow: auto; }
+.vehicle-total { min-width: 25px; height: 25px; display: grid; place-items: center; border-radius: 99px; color: white; background: var(--ink); font: 700 8px var(--font-mono); }
+.edit-note { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 10px 12px; border-radius: 7px; background: #eef6f3; color: #39715e; font-size: 8.5px; }
 .vehicle-row .field { margin-bottom: 0; }
 .vehicle-index { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; color: white; background: var(--ink); font: 700 8px var(--font-mono); }
 .remove-vehicle { width: 27px; height: 27px; display: grid; place-items: center; border: 0; border-radius: 6px; color: var(--red); background: #fbeaec; }
@@ -170,6 +177,8 @@ table { width: 100%; border-collapse: collapse; min-width: 920px; }th { padding:
   .vehicle-row { grid-template-columns: 24px 1fr 28px; }
   .vehicle-row .field:nth-of-type(2) { grid-column: 2 / 3; }
   .vehicle-row .remove-vehicle { grid-column: 3; grid-row: 1; }
+  .edit-vehicle-row { grid-template-columns: 24px 1fr; }
+  .edit-vehicle-row .field:nth-of-type(2) { grid-column: 2; }
   .incident-results > button { grid-template-columns: 28px 1fr 15px; }
   .incident-results .result-vehicle { grid-column: 2; padding: 5px 0 0; border: 0; }
   .incident-results > button > svg { grid-column: 3; grid-row: 1 / 3; }

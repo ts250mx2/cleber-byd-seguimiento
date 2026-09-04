@@ -10,6 +10,22 @@ export async function POST(request: Request) {
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
+    if (payload.action === "update") {
+      const firstCaseId = Number(String(payload.vehicles?.[0]?.caseId || "").replace("DB-", ""));
+      const [ownerRows] = await connection.execute("SELECT customer_id FROM follow_up_cases WHERE id=? LIMIT 1", [firstCaseId]);
+      const owner = (ownerRows as Array<{ customer_id: number }>)[0];
+      if (!owner) throw new Error("Cliente no encontrado");
+      await connection.execute("UPDATE customers SET full_name=?,normalized_name=?,phone=?,email=? WHERE id=?", [payload.customer, customerNameKey(String(payload.customer || "")), payload.phone || null, payload.email || null, owner.customer_id]);
+      for (const vehicle of payload.vehicles || []) {
+        const caseId = Number(String(vehicle.caseId || "").replace("DB-", ""));
+        const [vehicleRows] = await connection.execute("SELECT vehicle_id FROM follow_up_cases WHERE id=? AND customer_id=? LIMIT 1", [caseId, owner.customer_id]);
+        const linked = (vehicleRows as Array<{ vehicle_id: number }>)[0];
+        if (!linked) throw new Error("Vehículo no encontrado");
+        await connection.execute("UPDATE vehicles SET vin=?,model=? WHERE id=? AND customer_id=?", [vinKey(String(vehicle.vin || "")), vehicle.model || null, linked.vehicle_id, owner.customer_id]);
+      }
+      await connection.commit();
+      return NextResponse.json({ updated: true });
+    }
     const agency = canonicalAgency(String(payload.agency || ""));
     const [agencyResult] = await connection.execute("INSERT INTO agencies (name) VALUES (?) ON DUPLICATE KEY UPDATE id=LAST_INSERT_ID(id)", [agency]);
     const agencyId = (agencyResult as { insertId: number }).insertId;
@@ -33,6 +49,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ created });
   } catch (error) {
     await connection.rollback(); console.error("POST /api/customers", error);
+    if ((error as { code?: string }).code === "ER_DUP_ENTRY") return NextResponse.json({ error: "El nombre del cliente o alguno de sus VIN ya pertenece a otro registro" }, { status: 409 });
     return NextResponse.json({ error: "No fue posible guardar el cliente" }, { status: 500 });
   } finally { connection.release(); }
 }
