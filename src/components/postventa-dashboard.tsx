@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import {
   AlertTriangle, BarChart3, Bell, CalendarDays, Check, ChevronDown, ChevronRight,
   CarFront, Download, FileSpreadsheet, Gauge, Headphones, LayoutDashboard, Menu,
@@ -13,6 +14,7 @@ import { importExcel } from "@/lib/excel-import";
 import type { CaseStatus, FollowUpCase, Stage } from "@/lib/types";
 import { canonicalAgencies, canonicalAgency } from "@/lib/agencies";
 import { customerNameKey, customerVinKey, indexCasesByCustomerVin, vinKey } from "@/lib/customer-index";
+import { vehicleImageFor } from "@/lib/vehicle-images";
 
 const navItems = [
   { id: "dashboard", label: "Resumen", icon: LayoutDashboard },
@@ -57,6 +59,15 @@ async function postJson(url: string, body: unknown) {
 
 function Badge({ status }: { status: CaseStatus }) {
   return <span className={`status status-${status}`}><i />{statusLabel[status]}</span>;
+}
+
+function VehiclePhoto({ model, status }: { model: string; status: CaseStatus }) {
+  const photo = vehicleImageFor(model);
+  return <div className={`vehicle-photo${photo ? "" : " vehicle-photo-fallback"}`}>
+    {photo ? <Image src={photo.src} alt={`BYD ${photo.family}`} fill sizes="(max-width: 700px) 100vw, 260px" /> : <CarFront size={48} strokeWidth={1.25} />}
+    <span className="vehicle-photo-family">{photo?.family || "MODELO BYD"}</span>
+    <Badge status={status} />
+  </div>;
 }
 
 function RouteRail({ item, compact = false }: { item: FollowUpCase; compact?: boolean }) {
@@ -372,7 +383,7 @@ function CustomerEditModal({ customer, onClose, onSave, onSaveVehicle }: { custo
       <label className="field field-full"><span>Correo</span><input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></label>
     </div>
     <section className="vehicle-detail-section"><div className="vehicles-title"><div><CarFront size={17} /><span><strong>Vehículos registrados</strong><small>Un registro único por cada combinación cliente + VIN.</small></span></div><button type="button" className="button vehicle-add-button" onClick={() => setVehicleModal({ mode: "new" })}><Plus size={15} />Agregar vehículo</button></div>
-      <div className="vehicle-card-grid">{customer.cases.map((item) => <article className="vehicle-card" key={item.id}><div className="vehicle-card-top"><span className="vehicle-card-icon"><CarFront size={18} /></span><Badge status={item.status} /></div><strong className="vehicle-card-model">{item.vehicle || "Modelo sin registrar"}</strong><span className="vehicle-card-vin">{item.vin}</span><div className="vehicle-card-meta"><span>{item.agency}</span><span>{item.source === "entrega" ? "Post entrega" : "Post servicio"}</span></div><button type="button" onClick={() => setVehicleModal({ mode: "edit", item })}><Pencil size={13} />Editar vehículo</button></article>)}</div>
+      <div className="vehicle-card-grid">{customer.cases.map((item) => <article className="vehicle-card" key={item.id}><VehiclePhoto model={item.vehicle} status={item.status} /><div className="vehicle-card-copy"><strong className="vehicle-card-model">{item.vehicle || "Modelo sin registrar"}</strong><span className="vehicle-card-vin">{item.vin}</span><div className="vehicle-card-meta"><span>{item.agency}</span><span>{item.source === "entrega" ? "Post entrega" : "Post servicio"}</span></div><button type="button" onClick={() => setVehicleModal({ mode: "edit", item })}><Pencil size={13} />Editar vehículo</button></div></article>)}</div>
     </section>
     <div className="edit-note"><ShieldCheck size={15} /><span>Los contactos e incidencias anteriores permanecerán vinculados al vehículo.</span></div>
     <div className="modal-actions"><button type="button" className="button secondary" onClick={onClose}>Cancelar</button><button className="button primary"><Check size={16} />Guardar cambios</button></div>
