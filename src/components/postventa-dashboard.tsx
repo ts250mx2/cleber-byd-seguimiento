@@ -231,7 +231,7 @@ export function PostventaDashboard() {
   return (
     <div className="app-shell">
       <aside className={`sidebar ${mobileNav ? "mobile-open" : ""}`}>
-        <div className="brand"><div className="brand-mark">BYD</div><div><strong>CLEBER</strong><span>Customer care</span></div></div>
+        <div className="brand"><Image src="/brand/byd-cleber-logo.svg" alt="BYD CLEBER" width={164} height={61} priority /><span>Customer care</span></div>
         <button className="nav-close" onClick={() => setMobileNav(false)} aria-label="Cerrar menú"><X size={20} /></button>
         <nav>
           <span className="nav-caption">OPERACIÓN</span>

@@ -6,7 +6,7 @@ const manrope = Manrope({ variable: "--font-manrope", subsets: ["latin"] });
 const spaceMono = Space_Mono({ variable: "--font-mono", subsets: ["latin"], weight: ["400", "700"] });
 
 export const metadata: Metadata = {
-  title: "CLEBER Care | Seguimiento Postventa BYD",
+  title: "BYD CLEBER | Seguimiento Postventa",
   description: "Control operativo de seguimiento y experiencia postventa",
 };
 
