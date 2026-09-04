@@ -11,6 +11,7 @@ Sistema web para reemplazar los archivos de seguimiento postventa de Grupo CLEBE
 - Registro de llamadas e incidencias con prioridad.
 - Alta manual de clientes e incidencias, sin depender de una importación.
 - Edición del cliente, VIN y modelo de sus vehículos con conservación del historial.
+- Detalle de vehículos en cuadrícula, con modales independientes para editar o agregar unidades.
 - Filtros por agencia y estado, búsqueda, importación de Excel y exportación CSV.
 - Persistencia MySQL mediante APIs de Next.js para clientes, incidencias y seguimientos.
 

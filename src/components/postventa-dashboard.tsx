@@ -30,6 +30,7 @@ type NewCustomerPayload = {
 };
 type CustomerGroup = { key: string; name: string; phone: string; email?: string; cases: FollowUpCase[] };
 type EditCustomerPayload = { customer: string; phone: string; email?: string; vehicles: Array<{ caseId: string; vin: string; model: string }> };
+type VehicleModalPayload = { mode: "new" | "edit"; caseId?: string; vin: string; model: string; agency: string; source: "entrega" | "servicio"; referenceDate: string; advisor: string; bdcAgent: string };
 
 const stageLabel = (stage: Stage) => stage === "nps" ? "NPS" : `Día ${stage}`;
 const prettyDate = (date: string) => new Intl.DateTimeFormat("es-MX", { day: "2-digit", month: "short" }).format(new Date(`${date}T12:00:00`)).replace(".", "");
@@ -192,6 +193,14 @@ export function PostventaDashboard() {
     } catch (error) { announce(error instanceof Error ? error.message : "No fue posible actualizar el cliente"); }
   };
 
+  const saveCustomerVehicle = async (customer: CustomerGroup, payload: VehicleModalPayload) => {
+    try {
+      if (payload.mode === "edit") await postJson("/api/customers", { action: "updateVehicle", caseId: payload.caseId, vin: payload.vin, model: payload.model });
+      else await postJson("/api/customers", { action: "addVehicle", customerCaseId: customer.cases[0].id, ...payload });
+      await refreshCases(); setEditingCustomer(null); announce(payload.mode === "edit" ? "Vehículo actualizado" : "Vehículo agregado al cliente");
+    } catch (error) { announce(error instanceof Error ? error.message : "No fue posible guardar el vehículo"); }
+  };
+
   const exportCsv = () => {
     const rows = [["Folio", "Cliente", "Teléfono", "Agencia", "Vehículo", "VIN", "Origen", "Estado", "Próximo contacto"], ...filtered.map((item) => [item.id, item.customer, item.phone, item.agency, item.vehicle, item.vin, item.source, statusLabel[item.status], getNext(item)?.dueDate ?? ""])];
     const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n");
@@ -297,7 +306,7 @@ export function PostventaDashboard() {
       {recording && <RecordModal item={recording} onClose={() => setRecording(null)} onSave={completeTouch} />}
       {addingCustomer && <CustomerModal onClose={() => setAddingCustomer(false)} onSave={addCustomer} />}
       {addingIncident && <IncidentModal cases={indexedVehicles} onClose={() => setAddingIncident(false)} onSave={addIncident} />}
-      {editingCustomer && <CustomerEditModal customer={editingCustomer} onClose={() => setEditingCustomer(null)} onSave={editCustomer} />}
+      {editingCustomer && <CustomerEditModal customer={editingCustomer} onClose={() => setEditingCustomer(null)} onSave={editCustomer} onSaveVehicle={(payload) => saveCustomerVehicle(editingCustomer, payload)} />}
       {notice && <div className="toast"><Check size={16} /><span>{notice}</span></div>}
     </div>
   );
@@ -351,22 +360,33 @@ function CustomerModal({ onClose, onSave }: { onClose: () => void; onSave: (payl
   </form></div>;
 }
 
-function CustomerEditModal({ customer, onClose, onSave }: { customer: CustomerGroup; onClose: () => void; onSave: (payload: EditCustomerPayload) => void }) {
+function CustomerEditModal({ customer, onClose, onSave, onSaveVehicle }: { customer: CustomerGroup; onClose: () => void; onSave: (payload: EditCustomerPayload) => void; onSaveVehicle: (payload: VehicleModalPayload) => void }) {
   const [form, setForm] = useState({ customer: customer.name, phone: customer.phone, email: customer.email || "" });
-  const [vehicles, setVehicles] = useState(customer.cases.map((item) => ({ caseId: item.id, vin: item.vin, model: item.vehicle })));
-  const updateVehicle = (index: number, field: "vin" | "model", value: string) => setVehicles((current) => current.map((vehicle, position) => position === index ? { ...vehicle, [field]: value } : vehicle));
-  return <div className="overlay modal-layer" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><form className="modal wide-modal" onSubmit={(event) => { event.preventDefault(); onSave({ ...form, vehicles }); }}>
+  const [vehicleModal, setVehicleModal] = useState<{ mode: "new" | "edit"; item?: FollowUpCase } | null>(null);
+  const vehicleRefs = customer.cases.map((item) => ({ caseId: item.id, vin: item.vin, model: item.vehicle }));
+  return <><div className="overlay modal-layer" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><form className="modal vehicles-modal" onSubmit={(event) => { event.preventDefault(); onSave({ ...form, vehicles: vehicleRefs }); }}>
     <div className="modal-head"><div><span className="panel-kicker">DIRECTORIO MAESTRO</span><h2>Editar cliente</h2><p>Actualiza sus datos y los vehículos vinculados sin alterar los seguimientos históricos.</p></div><button type="button" className="icon-button bordered" onClick={onClose}><X size={18} /></button></div>
     <div className="form-grid">
       <label className="field"><span>Nombre completo *</span><input required value={form.customer} onChange={(event) => setForm({ ...form, customer: event.target.value })} /></label>
       <label className="field"><span>Teléfono</span><input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} /></label>
       <label className="field field-full"><span>Correo</span><input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></label>
     </div>
-    <section className="vehicles-editor edit-vehicles"><div className="vehicles-title"><div><CarFront size={17} /><span><strong>Vehículos registrados</strong><small>El VIN y el modelo se actualizan en todos sus expedientes asociados.</small></span></div><span className="vehicle-total">{vehicles.length}</span></div>
-      {vehicles.map((vehicle, index) => <div className="vehicle-row edit-vehicle-row" key={vehicle.caseId}><span className="vehicle-index">{index + 1}</span><label className="field"><span>VIN *</span><input required value={vehicle.vin} onChange={(event) => updateVehicle(index, "vin", event.target.value.toUpperCase())} /></label><label className="field"><span>Modelo del vehículo *</span><input required value={vehicle.model} onChange={(event) => updateVehicle(index, "model", event.target.value)} placeholder="Ej. Song Plus DM-i" /></label></div>)}
+    <section className="vehicle-detail-section"><div className="vehicles-title"><div><CarFront size={17} /><span><strong>Vehículos registrados</strong><small>Un registro único por cada combinación cliente + VIN.</small></span></div><button type="button" className="button vehicle-add-button" onClick={() => setVehicleModal({ mode: "new" })}><Plus size={15} />Agregar vehículo</button></div>
+      <div className="vehicle-card-grid">{customer.cases.map((item) => <article className="vehicle-card" key={item.id}><div className="vehicle-card-top"><span className="vehicle-card-icon"><CarFront size={18} /></span><Badge status={item.status} /></div><strong className="vehicle-card-model">{item.vehicle || "Modelo sin registrar"}</strong><span className="vehicle-card-vin">{item.vin}</span><div className="vehicle-card-meta"><span>{item.agency}</span><span>{item.source === "entrega" ? "Post entrega" : "Post servicio"}</span></div><button type="button" onClick={() => setVehicleModal({ mode: "edit", item })}><Pencil size={13} />Editar vehículo</button></article>)}</div>
     </section>
     <div className="edit-note"><ShieldCheck size={15} /><span>Los contactos e incidencias anteriores permanecerán vinculados al vehículo.</span></div>
     <div className="modal-actions"><button type="button" className="button secondary" onClick={onClose}>Cancelar</button><button className="button primary"><Check size={16} />Guardar cambios</button></div>
+  </form></div>{vehicleModal && <VehicleEditorModal mode={vehicleModal.mode} item={vehicleModal.item} defaultAgency={customer.cases[0]?.agency || "San Pedro"} onClose={() => setVehicleModal(null)} onSave={onSaveVehicle} />}</>;
+}
+
+function VehicleEditorModal({ mode, item, defaultAgency, onClose, onSave }: { mode: "new" | "edit"; item?: FollowUpCase; defaultAgency: string; onClose: () => void; onSave: (payload: VehicleModalPayload) => void }) {
+  const [form, setForm] = useState<VehicleModalPayload>({ mode, caseId: item?.id, vin: item?.vin || "", model: item?.vehicle || "", agency: item?.agency || defaultAgency, source: item?.source || "entrega", referenceDate: item?.referenceDate || today, advisor: item?.advisor || "", bdcAgent: item?.bdcAgent || "" });
+  return <div className="overlay modal-layer vehicle-editor-layer" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><form className="modal vehicle-editor-modal" onSubmit={(event) => { event.preventDefault(); onSave(form); }}>
+    <div className="modal-head"><div><span className="panel-kicker">{mode === "new" ? "NUEVA UNIDAD" : "VEHÍCULO REGISTRADO"}</span><h2>{mode === "new" ? "Agregar vehículo" : "Editar vehículo"}</h2><p>{mode === "new" ? "El nuevo VIN quedará vinculado a este cliente." : "La corrección se reflejará en todos sus seguimientos."}</p></div><button type="button" className="icon-button bordered" onClick={onClose}><X size={18} /></button></div>
+    <div className="vehicle-form-identity"><CarFront size={22} /><span><strong>{form.model || "Modelo BYD"}</strong><small>{form.vin || "VIN pendiente"}</small></span></div>
+    <div className="form-grid"><label className="field"><span>VIN *</span><input required value={form.vin} onChange={(event) => setForm({ ...form, vin: event.target.value.toUpperCase() })} placeholder="VIN de la unidad" /></label><label className="field"><span>Modelo del vehículo *</span><input required value={form.model} onChange={(event) => setForm({ ...form, model: event.target.value })} placeholder="Ej. Song Plus DM-i" /></label></div>
+    {mode === "new" && <><div className="form-grid"><label className="field"><span>Agencia *</span><select value={form.agency} onChange={(event) => setForm({ ...form, agency: event.target.value })}>{canonicalAgencies.map((name) => <option key={name}>{name}</option>)}</select></label><label className="field"><span>Seguimiento *</span><select value={form.source} onChange={(event) => setForm({ ...form, source: event.target.value as "entrega" | "servicio" })}><option value="entrega">Post entrega · 7, 15 y 28 días</option><option value="servicio">Post servicio · NPS</option></select></label><label className="field"><span>Fecha de referencia *</span><input required type="date" value={form.referenceDate} onChange={(event) => setForm({ ...form, referenceDate: event.target.value })} /></label><label className="field"><span>Agente BDC</span><input value={form.bdcAgent} onChange={(event) => setForm({ ...form, bdcAgent: event.target.value })} /></label></div><label className="field"><span>Asesor de venta/servicio</span><input value={form.advisor} onChange={(event) => setForm({ ...form, advisor: event.target.value })} /></label></>}
+    <div className="modal-actions"><button type="button" className="button secondary" onClick={onClose}>Cancelar</button><button className="button primary"><Check size={16} />{mode === "new" ? "Agregar vehículo" : "Guardar vehículo"}</button></div>
   </form></div>;
 }
 
