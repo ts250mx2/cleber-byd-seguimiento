@@ -3,13 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3006",
+    "dev": "next dev -p 3047",
     "build": "next build",
-    "start": "next start -p 3013",
+    "start": "next start -p 3048",
     "lint": "eslint"
   },
   "dependencies": {
     "lucide-react": "^0.575.0",
+    "mysql2": "^3.24.3",
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
