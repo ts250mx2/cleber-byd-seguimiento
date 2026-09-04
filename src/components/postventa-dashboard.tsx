@@ -30,9 +30,6 @@ type NewCustomerPayload = {
 };
 
 const stageLabel = (stage: Stage) => stage === "nps" ? "NPS" : `Día ${stage}`;
-const addDays = (date: string, days: number) => {
-  const value = new Date(`${date}T12:00:00`); value.setDate(value.getDate() + days); return value.toISOString().slice(0, 10);
-};
 const prettyDate = (date: string) => new Intl.DateTimeFormat("es-MX", { day: "2-digit", month: "short" }).format(new Date(`${date}T12:00:00`)).replace(".", "");
 const statusLabel: Record<CaseStatus, string> = {
   pendiente: "Pendiente", contactado: "Contactado", incidencia: "Incidencia", resuelto: "Resuelto", "no-localizado": "No localizado",
@@ -40,6 +37,19 @@ const statusLabel: Record<CaseStatus, string> = {
 
 function getNext(item: FollowUpCase) {
   return item.touchpoints.find((point) => !point.completedAt) ?? item.touchpoints[item.touchpoints.length - 1];
+}
+
+async function fetchDatabaseCases() {
+  const response = await fetch("/api/cases", { cache: "no-store" });
+  if (!response.ok) throw new Error("database unavailable");
+  const data = await response.json() as { cases: FollowUpCase[] };
+  return data.cases;
+}
+
+async function postJson(url: string, body: unknown) {
+  const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || "request failed");
+  return response.json();
 }
 
 function Badge({ status }: { status: CaseStatus }) {
@@ -91,14 +101,14 @@ export function PostventaDashboard() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const stored = window.localStorage.getItem("cleber-byd-cases");
-    if (stored) {
-      try {
-        const restored = (JSON.parse(stored) as FollowUpCase[]).map((item) => ({ ...item, agency: canonicalAgency(item.agency) }));
-        queueMicrotask(() => setCases(restored));
-      } catch { /* keep demo data */ }
-    }
+    fetchDatabaseCases().then((databaseCases) => setCases(databaseCases)).catch(() => {
+      const stored = window.localStorage.getItem("cleber-byd-cases");
+      if (!stored) return;
+      try { setCases((JSON.parse(stored) as FollowUpCase[]).map((item) => ({ ...item, agency: canonicalAgency(item.agency) }))); } catch { /* keep demo data */ }
+    });
   }, []);
+
+  const refreshCases = async () => setCases(await fetchDatabaseCases());
 
   const save = (next: FollowUpCase[]) => {
     const normalized = next.map((item) => ({ ...item, agency: canonicalAgency(item.agency) }));
@@ -153,29 +163,23 @@ export function PostventaDashboard() {
     } catch { announce("No fue posible leer el archivo. Verifica que sea un Excel válido."); }
   };
 
-  const addCustomer = (payload: NewCustomerPayload) => {
+  const addCustomer = async (payload: NewCustomerPayload) => {
     const existingKeys = new Set(cases.map(customerVinKey));
     const newVehicles = payload.vehicles.filter((vehicle) => !existingKeys.has(`${customerNameKey(payload.customer)}|${vinKey(vehicle.vin)}`));
-    const created = newVehicles.map((vehicle, index): FollowUpCase => ({
-      id: `MAN-${Date.now().toString(36).toUpperCase()}-${index + 1}`,
-      customer: payload.customer, phone: payload.phone, email: payload.email,
-      agency: canonicalAgency(payload.agency), vehicle: vehicle.model, vin: vehicle.vin,
-      advisor: payload.advisor, bdcAgent: payload.bdcAgent, source: payload.source,
-      referenceDate: payload.referenceDate, status: "pendiente", priority: "normal",
-      touchpoints: payload.source === "entrega"
-        ? ([7, 15, 28] as const).map((stage) => ({ stage, dueDate: addDays(payload.referenceDate, stage) }))
-        : [{ stage: "nps", dueDate: addDays(payload.referenceDate, 7) }],
-    }));
-    if (!created.length) { announce("Ese cliente y VIN ya están registrados"); return; }
-    save([...created, ...cases]);
-    setAddingCustomer(false); setView("clientes");
-    const ignored = payload.vehicles.length - created.length;
-    announce(`Cliente guardado con ${created.length} ${created.length === 1 ? "vehículo" : "vehículos"}${ignored ? `; ${ignored} VIN duplicado no se agregó` : ""}`);
+    if (!newVehicles.length) { announce("Ese cliente y VIN ya están registrados"); return; }
+    try {
+      const result = await postJson("/api/customers", { ...payload, vehicles: newVehicles }) as { created: number };
+      await refreshCases(); setAddingCustomer(false); setView("clientes");
+      const ignored = payload.vehicles.length - newVehicles.length;
+      announce(`Cliente guardado con ${result.created} ${result.created === 1 ? "vehículo" : "vehículos"}${ignored ? `; ${ignored} VIN duplicado no se agregó` : ""}`);
+    } catch { announce("No fue posible guardar el cliente en la base de datos"); }
   };
 
-  const addIncident = (caseId: string, description: string, owner: string, dueDate: string, priority: FollowUpCase["priority"]) => {
-    save(cases.map((item) => item.id === caseId ? { ...item, status: "incidencia", priority, complaint: description, incidentOwner: owner, incidentDueDate: dueDate } : item));
-    setAddingIncident(false); setView("incidencias"); announce("Incidencia creada y asignada");
+  const addIncident = async (caseId: string, description: string, owner: string, dueDate: string, priority: FollowUpCase["priority"]) => {
+    try {
+      await postJson("/api/incidents", { caseId, description, owner, dueDate, priority });
+      await refreshCases(); setAddingIncident(false); setView("incidencias"); announce("Incidencia creada y asignada");
+    } catch { announce("No fue posible crear la incidencia en la base de datos"); }
   };
 
   const exportCsv = () => {
@@ -185,16 +189,13 @@ export function PostventaDashboard() {
     announce("Reporte exportado correctamente");
   };
 
-  const completeTouch = (item: FollowUpCase, result: string, note: string, complaint: boolean) => {
+  const completeTouch = async (item: FollowUpCase, result: string, note: string, complaint: boolean) => {
     const nextPoint = item.touchpoints.find((point) => !point.completedAt);
     if (!nextPoint) return;
-    const updated: FollowUpCase = {
-      ...item, status: complaint ? "incidencia" : result === "No localizado" ? "no-localizado" : "contactado",
-      priority: complaint ? "alta" : item.priority, complaint: complaint ? note : item.complaint,
-      touchpoints: item.touchpoints.map((point) => point === nextPoint ? { ...point, completedAt: today, result, note } : point),
-    };
-    save(cases.map((entry) => entry.id === item.id ? updated : entry));
-    setRecording(null); setSelected(updated); announce("Seguimiento guardado en el expediente");
+    try {
+      await postJson("/api/touchpoints", { caseId: item.id, stage: nextPoint.stage, result, note, complaint });
+      await refreshCases(); setRecording(null); setSelected(null); announce("Seguimiento guardado en la base de datos");
+    } catch { announce("No fue posible guardar el seguimiento en la base de datos"); }
   };
 
   return (

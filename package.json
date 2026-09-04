@@ -6,7 +6,8 @@
     "dev": "next dev -p 3047",
     "build": "next build",
     "start": "next start -p 3048",
-    "lint": "eslint"
+    "lint": "eslint",
+    "migrate:excel": "node scripts/migrate-excel.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.575.0",

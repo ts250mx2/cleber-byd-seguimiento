@@ -11,7 +11,7 @@ Sistema web para reemplazar los archivos de seguimiento postventa de Grupo CLEBE
 - Registro de llamadas e incidencias con prioridad.
 - Alta manual de clientes e incidencias, sin depender de una importación.
 - Filtros por agencia y estado, búsqueda, importación de Excel y exportación CSV.
-- Persistencia local en el navegador para demostración.
+- Persistencia MySQL mediante APIs de Next.js para clientes, incidencias y seguimientos.
 
 ## Ejecutar
 
@@ -20,11 +20,19 @@ npm install
 npm run dev
 ```
 
-Abrir `http://localhost:3006`.
+Abrir `http://localhost:3047`.
+
+La conexión se configura en `.env.local`; usa `.env.example` como referencia. El archivo con credenciales está excluido de Git.
+
+Para crear el esquema y migrar los dos libros históricos de forma idempotente:
+
+```bash
+npm run migrate:excel
+```
 
 ## Recomendación para producción
 
-La siguiente fase debe sustituir la persistencia local por MySQL, agregar autenticación por roles y conservar una bitácora inmutable. El modelo recomendado separa clientes, vehículos, órdenes de servicio, ciclos de seguimiento, contactos e incidencias. La importación de Excel queda como herramienta de migración y contingencia, no como operación diaria.
+La aplicación ya usa MySQL y separa clientes, vehículos, ciclos de seguimiento, contactos e incidencias. La siguiente fase recomendada es agregar autenticación por roles y activar la bitácora por usuario. La importación de Excel queda como herramienta de migración y contingencia, no como operación diaria.
 
 Los nombres históricos de agencia se homologan automáticamente a: Carretera Nacional, Chihuahua, Linda Vista, Juárez y San Pedro.
 
